@@ -18,7 +18,7 @@ const ModelSelector = ({ selectedModel, onModelChange }) => {
       
       // Set default model if none selected
       if (!selectedModel && modelsData.length > 0) {
-        const defaultModel = modelsData.find(m => m.name === 'gpt-3.5-turbo') || modelsData[0];
+        const defaultModel = modelsData.find(m => m.name.includes('gpt-5')) || modelsData[0];
         onModelChange(defaultModel);
       }
       setError(null);
