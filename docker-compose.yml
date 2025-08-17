@@ -7,9 +7,6 @@ services:
     container_name: semantix-chat-backend
     env_file:
       - ./backend/.env
-    environment:
-      - PORT=5669
-      - LOG_LEVEL=INFO
     ports:
       - "0.0.0.0:5669:5669"
     restart: unless-stopped

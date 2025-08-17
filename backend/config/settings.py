@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
     port: int = int(os.getenv("PORT", "5669"))
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
+    max_output_tokens: int = int(os.getenv("MAX_OUTPUT_TOKENS", "5000"))
     max_file_size: int = 10 * 1024 * 1024  # 10MB
     supported_file_types: list = [".pdf", ".txt"]
     

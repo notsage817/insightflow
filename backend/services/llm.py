@@ -214,6 +214,7 @@ class LLMService:
             raise ValueError("OpenAI client not initialized")
         
         logger.info(f"Generating OpenAI response with model {model_name}")
+        logger.debug(f"Input messages: {messages}")
         
         try:
             # Use the modern OpenAI API
@@ -223,7 +224,7 @@ class LLMService:
                 response = self.openai_client.chat.completions.create(
                     model=model_name,
                     messages=messages,
-                    max_completion_tokens=2000
+                    max_completion_tokens=self.settings.max_output_tokens
                 )
             else:
                 # Other models: use standard parameters
@@ -231,11 +232,38 @@ class LLMService:
                     model=model_name,
                     messages=messages,
                     temperature=0.7,
-                    max_tokens=2000
+                    max_tokens=self.settings.max_output_tokens
                 )
             
             # Modern OpenAI response format
-            content = response.choices[0].message.content
+            logger.debug(f"OpenAI response object: {response}")
+            
+            if not response.choices:
+                logger.error("No choices in OpenAI response")
+                return "I apologize, but I couldn't generate a response. Please try again."
+            
+            choice = response.choices[0]
+            logger.debug(f"First choice: {choice}")
+            logger.info(f"OpenAI finish_reason: {choice.finish_reason}")
+            
+            if choice.finish_reason == "content_filter":
+                logger.warning("OpenAI response was filtered by content policy")
+                return "I apologize, but my response was filtered by content policy. Please try rephrasing your question."
+            
+            if choice.finish_reason in ["length", "max_tokens"]:
+                logger.warning(f"OpenAI response was cut off due to {choice.finish_reason}")
+                # Still return the partial content if available
+            
+            content = choice.message.content
+            logger.info(f"OpenAI raw content: {repr(content)}")
+            
+            if content is None:
+                logger.error(f"OpenAI returned None content. Choice: {choice}")
+                return "I apologize, but I received an empty response. Please try again."
+            
+            if not content.strip():
+                logger.warning("OpenAI returned empty content")
+                return "I apologize, but I received an empty response. Please try again."
             
             logger.info(f"Generated OpenAI response: {len(content)} characters")
             return content
@@ -270,7 +298,7 @@ class LLMService:
                 system=system_message if system_message else "You are a helpful assistant.",
                 messages=anthropic_messages,
                 temperature=0.7,
-                max_tokens=2000
+                max_tokens=self.settings.max_output_tokens
             )
             
             content = response.content[0].text
