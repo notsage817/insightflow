@@ -28,6 +28,13 @@ if [ ! -f "backend/.env" ]; then
     echo ""
 fi
 
+# Check if containers are already running
+if docker-compose ps | grep -q "Up"; then
+    echo "⚠️  Containers are already running. Stopping them first..."
+    docker-compose down
+    echo "✅ Stopped existing containers"
+fi
+
 # Build and start the application
 echo "🔨 Building and starting containers..."
 docker-compose up --build

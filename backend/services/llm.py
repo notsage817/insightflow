@@ -20,43 +20,39 @@ class LLMService:
         self.openai_client = None
         self.anthropic_client = None
         
-        if self.settings.openai_api_key:
-            try:
-                self.openai_client = openai.OpenAI(api_key=self.settings.openai_api_key)
-                logger.info("OpenAI client initialized")
-            except Exception as e:
-                logger.error(f"Failed to initialize OpenAI client: {e}")
+        logger.info(f"OpenAI API key starts with: {self.settings.openai_api_key[:10]}...")
+        logger.info(f"Anthropic API key starts with: {self.settings.anthropic_api_key[:10]}...")
         
-        if self.settings.anthropic_api_key:
+        # Check if OpenAI API key is valid (not placeholder)
+        if self.settings.openai_api_key and not self.settings.openai_api_key.startswith("your_"):
+            try:
+                # Use the modern OpenAI API (v1.0+) with explicit http_client to avoid proxy issues
+                import httpx
+                http_client = httpx.Client()
+                self.openai_client = openai.OpenAI(
+                    api_key=self.settings.openai_api_key,
+                    http_client=http_client
+                )
+                logger.info("✅ OpenAI client initialized successfully")
+            except Exception as e:
+                logger.error(f"❌ Failed to initialize OpenAI client: {e}")
+        else:
+            logger.info("⚠️ No valid OpenAI API key configured")
+        
+        # Check if Anthropic API key is valid (not placeholder)
+        if self.settings.anthropic_api_key and not self.settings.anthropic_api_key.startswith("your_"):
             try:
                 self.anthropic_client = anthropic.Anthropic(api_key=self.settings.anthropic_api_key)
-                logger.info("Anthropic client initialized")
+                logger.info("✅ Anthropic client initialized successfully")
             except Exception as e:
-                logger.error(f"Failed to initialize Anthropic client: {e}")
+                logger.error(f"❌ Failed to initialize Anthropic client: {e}")
+        else:
+            logger.info("⚠️ No valid Anthropic API key configured")
     
     def _init_models(self):
         """Initialize available models"""
-        self.available_models = [
-            # OpenAI models
-            ModelInfo(
-                provider=ModelProvider.OPENAI,
-                name="gpt-4-turbo-preview",
-                display_name="GPT-4 Turbo",
-                description="Most capable GPT-4 model"
-            ),
-            ModelInfo(
-                provider=ModelProvider.OPENAI,
-                name="gpt-4",
-                display_name="GPT-4",
-                description="Standard GPT-4 model"
-            ),
-            ModelInfo(
-                provider=ModelProvider.OPENAI,
-                name="gpt-3.5-turbo",
-                display_name="GPT-3.5 Turbo",
-                description="Fast and efficient model"
-            ),
-            # Anthropic models
+        self.static_anthropic_models = [
+            # Anthropic models (static for now)
             ModelInfo(
                 provider=ModelProvider.ANTHROPIC,
                 name="claude-3-opus-20240229",
@@ -76,17 +72,124 @@ class LLMService:
                 description="Fast Claude model"
             ),
         ]
-        logger.info(f"Initialized {len(self.available_models)} available models")
+        # OpenAI models will be fetched dynamically
+        self.openai_models_cache = []
+        self.openai_models_last_fetched = None
+        logger.info("Model system initialized - OpenAI models will be fetched dynamically")
+    
+    def _fetch_openai_models(self) -> List[ModelInfo]:
+        """Fetch available OpenAI models from API"""
+        if not self.openai_client:
+            return []
+        
+        try:
+            # Check cache validity (cache for 1 hour)
+            from datetime import datetime, timedelta
+            now = datetime.now()
+            if (self.openai_models_last_fetched and 
+                now - self.openai_models_last_fetched < timedelta(hours=1)):
+                return self.openai_models_cache
+            
+            logger.info("Fetching OpenAI models from API...")
+            models_response = self.openai_client.models.list()
+            
+            # Add ALL models from OpenAI API without filtering
+            all_models = []
+            for model in models_response.data:
+                model_id = model.id
+                
+                # Create intelligent display name and description
+                display_name = model_id
+                description = "OpenAI Model"
+                
+                if 'gpt-5' in model_id.lower():
+                    display_name = f"GPT-5 ({model_id})"
+                    description = "Latest GPT-5 model - next generation AI"
+                elif 'gpt-4o' in model_id.lower():
+                    display_name = f"GPT-4o ({model_id})"
+                    description = "Latest GPT-4o model - multimodal capabilities"
+                elif 'gpt-4' in model_id.lower():
+                    if 'turbo' in model_id.lower():
+                        display_name = f"GPT-4 Turbo ({model_id})"
+                        description = "GPT-4 Turbo - fast and capable"
+                    else:
+                        display_name = f"GPT-4 ({model_id})"
+                        description = "GPT-4 - highly capable model"
+                elif 'gpt-3.5' in model_id.lower():
+                    display_name = f"GPT-3.5 ({model_id})"
+                    description = "GPT-3.5 - fast and efficient"
+                elif 'dall-e' in model_id.lower():
+                    display_name = f"DALL-E ({model_id})"
+                    description = "Image generation model"
+                elif 'whisper' in model_id.lower():
+                    display_name = f"Whisper ({model_id})"
+                    description = "Speech to text model"
+                elif 'tts' in model_id.lower():
+                    display_name = f"TTS ({model_id})"
+                    description = "Text to speech model"
+                elif 'embedding' in model_id.lower():
+                    display_name = f"Embedding ({model_id})"
+                    description = "Text embedding model"
+                else:
+                    display_name = model_id
+                    description = f"OpenAI {model_id} model"
+                
+                all_models.append(ModelInfo(
+                    provider=ModelProvider.OPENAI,
+                    name=model_id,
+                    display_name=display_name,
+                    description=description
+                ))
+            
+            # Sort models by preference (GPT-5 first, then GPT-4o, GPT-4, etc.)
+            def model_priority(model):
+                name = model.name.lower()
+                if 'gpt-5' in name:
+                    return 0
+                elif 'gpt-4o' in name:
+                    return 1
+                elif 'gpt-4' in name and 'turbo' in name:
+                    return 2
+                elif 'gpt-4' in name:
+                    return 3
+                elif 'gpt-3.5' in name:
+                    return 4
+                elif 'chat' in name or 'gpt' in name:
+                    return 5
+                else:
+                    return 6
+            
+            all_models.sort(key=model_priority)
+            
+            logger.info(f"Total models fetched: {len(all_models)}")
+            if any('gpt-5' in model.name.lower() for model in all_models):
+                gpt5_count = len([m for m in all_models if 'gpt-5' in m.name.lower()])
+                logger.info(f"GPT-5 models included: {gpt5_count}")
+            
+            # Update cache
+            self.openai_models_cache = all_models
+            self.openai_models_last_fetched = now
+            
+            logger.info(f"Successfully fetched {len(all_models)} OpenAI models")
+            return all_models
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch OpenAI models: {e}")
+            # Return cached models if available, otherwise return empty list
+            return self.openai_models_cache if self.openai_models_cache else []
     
     def get_available_models(self) -> List[ModelInfo]:
         """Get list of available models based on configured API keys"""
         available = []
         
-        for model in self.available_models:
-            if model.provider == ModelProvider.OPENAI and self.openai_client:
-                available.append(model)
-            elif model.provider == ModelProvider.ANTHROPIC and self.anthropic_client:
-                available.append(model)
+        # Add OpenAI models if client is available
+        if self.openai_client:
+            openai_models = self._fetch_openai_models()
+            available.extend(openai_models)
+        
+        # Add Anthropic models if client is available
+        if self.anthropic_client:
+            available.extend(self.static_anthropic_models)
         
         logger.debug(f"Returning {len(available)} available models")
         return available
@@ -113,14 +216,27 @@ class LLMService:
         logger.info(f"Generating OpenAI response with model {model_name}")
         
         try:
-            response = self.openai_client.chat.completions.create(
-                model=model_name,
-                messages=messages,
-                temperature=0.7,
-                max_tokens=2000
-            )
+            # Use the modern OpenAI API
+            # GPT-5 models have different parameter requirements
+            if 'gpt-5' in model_name.lower():
+                # GPT-5 models: use max_completion_tokens and don't support custom temperature
+                response = self.openai_client.chat.completions.create(
+                    model=model_name,
+                    messages=messages,
+                    max_completion_tokens=2000
+                )
+            else:
+                # Other models: use standard parameters
+                response = self.openai_client.chat.completions.create(
+                    model=model_name,
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=2000
+                )
             
+            # Modern OpenAI response format
             content = response.choices[0].message.content
+            
             logger.info(f"Generated OpenAI response: {len(content)} characters")
             return content
             
