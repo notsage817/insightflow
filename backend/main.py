@@ -5,8 +5,9 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+import uvicorn
 
-from routers import chat
+from routers import chat, search
 from config.settings import get_settings
 
 # Load environment variables
@@ -45,6 +46,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(chat.router, prefix="/chat", tags=["chat"])
+app.include_router(search.router, prefix="/search", tags=["search"])
 
 @app.get("/")
 async def root():
@@ -65,7 +67,6 @@ async def health_check():
     }
 
 if __name__ == "__main__":
-    import uvicorn
     settings = get_settings()
     logger.info(f"Starting server on port {settings.port}")
     uvicorn.run(
