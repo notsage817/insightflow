@@ -1,9 +1,12 @@
 import logging
 from typing import List, Dict, Any, Optional
+from services.agent import ROUTER_AGENT
 import openai
 import anthropic
 from config.settings import get_settings
 from models.chat import ModelProvider, ModelInfo
+from agents import Runner
+
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +17,7 @@ class LLMService:
         self.settings = get_settings()
         self._init_clients()
         self._init_models()
+        self.agent = ROUTER_AGENT
     
     def _init_clients(self):
         """Initialize API clients"""
@@ -199,7 +203,8 @@ class LLMService:
         """Generate response from LLM"""
         try:
             if provider == ModelProvider.OPENAI:
-                return await self._generate_openai_response(messages, model_name)
+                # return await self._generate_openai_response(messages, model_name)
+                return await self._generate_openai_agent_response(messages, model_name)
             elif provider == ModelProvider.ANTHROPIC:
                 return await self._generate_anthropic_response(messages, model_name)
             else:
@@ -207,6 +212,11 @@ class LLMService:
         except Exception as e:
             logger.error(f"Error generating response with {provider}/{model_name}: {e}")
             raise
+
+    async def _generate_openai_agent_response(self, messages: List[Dict[str, str]], model_name: str) -> str:
+            logger.debug(f"Agent Input: {messages}")
+            result = await Runner.run(self.agent, messages)
+            return result.final_output
     
     async def _generate_openai_response(self, messages: List[Dict[str, str]], model_name: str) -> str:
         """Generate response using OpenAI API"""

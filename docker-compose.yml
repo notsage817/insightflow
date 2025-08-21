@@ -6,7 +6,6 @@ services:
       dockerfile: Dockerfile
     container_name: semantix-chat-backend
     env_file:
-      - ./backend/.env
       - .env
     ports:
       - "0.0.0.0:${BACKEND_HOST_PORT}:${BACKEND_CONTAINER_PORT}"
