@@ -1,5 +1,6 @@
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict
+from models.agent import AgentRunResultContext
 from services.agent import ROUTER_AGENT
 import openai
 import anthropic
@@ -18,6 +19,7 @@ class LLMService:
         self._init_clients()
         self._init_models()
         self.agent = ROUTER_AGENT
+        self.agent_context = AgentRunResultContext()
     
     def _init_clients(self):
         """Initialize API clients"""
@@ -215,7 +217,9 @@ class LLMService:
 
     async def _generate_openai_agent_response(self, messages: List[Dict[str, str]], model_name: str) -> str:
             logger.debug(f"Agent Input: {messages}")
-            result = await Runner.run(self.agent, messages)
+            result = await Runner.run(starting_agent=self.agent,
+                                      input=messages,
+                                      context=self.agent_context)
             return result.final_output
     
     async def _generate_openai_response(self, messages: List[Dict[str, str]], model_name: str) -> str:

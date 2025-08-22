@@ -1,32 +1,18 @@
 from __future__ import annotations
-import asyncio
-from typing import List, Dict, Any, Optional
-import os
-import json
-import numpy as np
-from dataclasses import dataclass
 from agents import Agent
-from reportlab.lib.pagesizes import LETTER
-from reportlab.pdfgen import canvas
 
+from models.agent import AgentRunResultContext
 from services.tools import job_search_tool
 
-# Context setting up
-@dataclass
-class AppContext:
-    last_jobs: List[Dict[str, Any]]
-    user_resume_text: Optional[str] = None
-    tool_results: Dict[str, Any] = None
 
-
-job_search_agent = Agent[AppContext](
+job_search_agent = Agent[AgentRunResultContext](
     name="Job Search Agent",
     handoff_description="Specialist that searches for jobs and return the top matches.",
     instructions=(
         "You help users search job openings. "
         "Ask clarifying questions if the query is vague. "
         "Use the job_search_tool to fetch results. "
-        "After calling the tool, store the returned results into the context as `last_jobs`. "
+        "After calling the tool, append search query to context.search_queries. "
         "Then present the results as a Markdown-formatted list. "
         "Each job should be shown as a bullet point in the format: "
         "* <id> | [<title>](<url>) | <location> | <publish_date>. "
@@ -36,25 +22,23 @@ job_search_agent = Agent[AppContext](
     tools=[job_search_tool],
 )
 
-# # --- Resume Modifier Agent ---
-# resume_modifier_agent = Agent[AppContext](
-#     name="Resume Modifier Agent",
-#     handoff_description="Tailors a user's resume to a specific retrieved job and produces a PDF.",
-#     instructions=(
-#         "You tailor the user's resume to a SINGLE job from the last search results.\n"
-#         "Rules:\n"
-#         "1) If the user didn't specify a job ID that exists in context.last_jobs, ask them to pick one.\n"
-#         "2) Use context.user_resume_text as the starting resume. If it's empty, ask the user to upload/paste it.\n"
-#         "3) Extract the key requirements from the chosen job posting and rewrite the resume to highlight aligned skills and outcomes.\n"
-#         "4) Keep truthful—DO NOT invent experience. Rephrase, reorder, and quantify existing items; add ATS-friendly keywords only if supported by the resume.\n"
-#         "5) After you finish the tailored text, call resume_pdf_generator(modified_resume_markdown) to create a PDF. Then return the file path to the user.\n"
-#         "Output style: short objective (optional), skills/tech stack, experience (bullets with quantified impact), education, and relevant projects.\n"
-#     ),
-#     tools=[assistant.resume_pdf_generator],
-# )
+job_followup_agent = Agent[AgentRunResultContext](
+    name="Job Follow-up Agent",
+    handoff_description="Answers follow-up questions about specific jobs from the last search.",
+    instructions=(
+        "You answer follow-up questions about jobs that were returned in the most recent search.\n\n"
+        "How to proceed:\n"
+        "1. Retrieve the last search query from `context.search_queries[-1]`.\n"
+        "2. Get the search results for that query from `context.search_tool_results[search_query]`.\n"
+        "3. Find the job that matches the job_id or title or other information mentioned in the user’s question.\n"
+        "4. Provide answer for user's question based on matched job information\n\n"
+        "If no job match found in the last search results, politely inform the user and suggest running a new search."
+    ),
+)
+
 
 # --- Router / Orchestrator Agent ---
-ROUTER_AGENT = Agent[AppContext](
+ROUTER_AGENT = Agent[AgentRunResultContext](
     name="Router",
     instructions=(
         "# Role\n"
@@ -68,5 +52,5 @@ ROUTER_AGENT = Agent[AppContext](
         "If needed, ask a brief clarifying question before choosing the agent.\n"
     ),
     # Router can delegate via handoffs:
-    handoffs=[job_search_agent],
+    handoffs=[job_search_agent, job_followup_agent],
 )

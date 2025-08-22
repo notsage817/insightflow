@@ -1,9 +1,11 @@
 import os
 from typing import Any, Dict, List
-from agents import function_tool
+from agents import RunContextWrapper, function_tool
 import tritonclient.http as httpclient
 import numpy as np
 import json
+
+from models.agent import AgentRunResultContext
 
 
 TRITON_ENDPOINT_ENV = "TRITON_ENDPOINT"
@@ -37,16 +39,27 @@ SEARCHER = Searcher(url=os.getenv(TRITON_ENDPOINT_ENV))
 # OpenAI function tool uses Python doc string to understand how to use the tool:
 # https://openai.github.io/openai-agents-python/tools/#function-tools
 @function_tool
-def job_search_tool(query: str, k: int) -> List[Dict[str, Any]]:
+def job_search_tool(wrapper: RunContextWrapper[AgentRunResultContext], query: str, k: int) -> List[Dict[str, Any]]:
     """
-    Search for job openings related to the given query.
+    Search for job openings related to the given query and store results in shared context.
 
     This function queries the job search backend to retrieve up to ``k`` 
     job postings that are most relevant to the provided search query. 
 
+    In addition to returning results directly, this function also updates
+    the shared run context ``wrapper.context.search_tool_results`` by
+    mapping the input ``query`` string to the retrieved list of job postings.
+    This allows other agents or tools to reuse the search results later
+    without re-running the query.
+
     Args:
-        query (str): The user's search query (e.g., job title, skills, or keywords).
-        k (int): The maximum number of job results to return.
+        wrapper (RunContextWrapper[AgentRunResultContext]): 
+            Provides access to the shared run context object. The field
+            ``wrapper.context.search_tool_results`` is updated with the results.
+        query (str): 
+            The user's search query (e.g., job title, skills, or keywords).
+        k (int): 
+            The maximum number of job results to return.
 
     Returns:
         List[Dict[str, Any]]: 
@@ -76,45 +89,28 @@ def job_search_tool(query: str, k: int) -> List[Dict[str, Any]]:
                 - **source_platform** (str): Source site/platform name.  
             - **score** (float): Relevance score from the search engine.
 
+    Side Effects:
+        Updates ``wrapper.context.search_tool_results`` with an entry:
+        
+        .. code-block:: python
+
+            wrapper.context.search_tool_results[query] = <results>
+        
+        where ``<results>`` is the returned list of job postings.
+
     Example:
-        >>> job_search_tool("machine learning engineer", 1)
+        >>> job_search_tool(wrapper, "machine learning engineer", 1)
         [
             {
                 "title": "AIML-Sr. Machine Learning Engineer, Measurement",
-                "url": "https://jobs.apple.com/en-us/details/200580040/aiml-sr-machine-learning-engineer-measurement?team=SFTWR",
-                "job": {
-                    "job_id": "200580040",
-                    "title": "AIML-Sr. Machine Learning Engineer, Measurement",
-                    "company": "Apple Inc.",
-                    "description": "In this role, the individual is expected to lead and grow...",
-                    "summary": "Apple Intelligence is on the lookout for an experienced...",
-                    "location": "Seattle, Washington, United States",
-                    "city": "Seattle",
-                    "state": "Washington",
-                    "country": "United States",
-                    "work_arrangement": "remote",
-                    "publish_date": "2025-02-27",
-                    "job_type": "full_time",
-                    "experience_level": "senior_level",
-                    "salary_min": 201300.0,
-                    "salary_max": 367400.0,
-                    "salary_currency": "USD",
-                    "required_skills": ["leadership", "PyTorch", "TensorFlow", "Python"],
-                    "minimum_qualifications": [
-                        "Bachelor’s degree in Computer Science...",
-                        "5+ years of experience in machine learning..."
-                    ],
-                    "preferred_qualifications": [
-                        "Master’s or PhD in STEM.",
-                        "Experience with distributed systems..."
-                    ],
-                    "application_url": "https://jobs.apple.com/app/en-us/apply/200580040",
-                    "source_platform": "jobs.apple.com"
-                },
+                "url": "https://jobs.apple.com/en-us/details/200580040/...",
+                "job": { ... },
                 "score": 0.79991716
             }
         ]
     """
     results = SEARCHER.search(query=query, k=k)
+    # Add query -> search results to local context for agents:
+    # https://openai.github.io/openai-agents-python/context/#local-context
+    wrapper.context.search_tool_results[query] = results
     return results
-
