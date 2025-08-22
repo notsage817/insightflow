@@ -97,6 +97,10 @@ async def send_message(conversation_id: str, request: ChatRequest):
             )
             conversation_id = conversation.id
         
+        # Add file to conversation's user_uploaded_files list if provided
+        if request.file_content:
+            conversation_manager.add_file_to_conversation(conversation_id, request.file_content)
+        
         # Add user message
         user_message = conversation_manager.add_message(
             conversation_id=conversation_id,
@@ -111,14 +115,9 @@ async def send_message(conversation_id: str, request: ChatRequest):
         # Prepare messages for LLM
         messages = []
         for msg in conversation.messages:
-            content = msg.content
-            # Include file content if present
-            if msg.file_attachment:
-                content += f"\n\nFile content:\n{msg.file_attachment}"
-            
             messages.append({
                 "role": msg.role.value,
-                "content": content
+                "content": msg.content
             })
         
         # Generate AI response
@@ -126,7 +125,8 @@ async def send_message(conversation_id: str, request: ChatRequest):
         ai_response = await llm_service.generate_response(
             messages=messages,
             provider=request.model_provider,
-            model_name=request.model_name
+            model_name=request.model_name,
+            uploaded_files=conversation.user_uploaded_files
         )
         
         # Add AI response to conversation

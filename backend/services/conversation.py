@@ -25,7 +25,8 @@ class ConversationManager:
             created_at=now,
             updated_at=now,
             model_provider=model_provider,
-            model_name=model_name
+            model_name=model_name,
+            user_uploaded_files=[]
         )
         
         self.conversations[conversation_id] = conversation
@@ -78,6 +79,19 @@ class ConversationManager:
         
         logger.info(f"Added {role} message to conversation {conversation_id}")
         return message
+    
+    def add_file_to_conversation(self, conversation_id: str, file_content: str) -> bool:
+        """Add file content to conversation's user_uploaded_files list"""
+        conversation = self.get_conversation(conversation_id)
+        if not conversation:
+            logger.error(f"Cannot add file to non-existent conversation {conversation_id}")
+            return False
+        
+        conversation.user_uploaded_files.append(file_content)
+        conversation.updated_at = datetime.now()
+        
+        logger.info(f"Added file to conversation {conversation_id}, total files: {len(conversation.user_uploaded_files)}")
+        return True
     
     def delete_conversation(self, conversation_id: str) -> bool:
         """Delete a conversation"""

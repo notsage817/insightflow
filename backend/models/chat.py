@@ -32,6 +32,7 @@ class Conversation(BaseModel):
     updated_at: datetime
     model_provider: ModelProvider
     model_name: str
+    user_uploaded_files: List[str] = []
 
 class ChatRequest(BaseModel):
     """Chat request model"""

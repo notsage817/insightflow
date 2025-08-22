@@ -201,12 +201,12 @@ class LLMService:
         return available
     
     async def generate_response(self, messages: List[Dict[str, str]], 
-                              provider: ModelProvider, model_name: str) -> str:
+                              provider: ModelProvider, model_name: str, uploaded_files: List[str]) -> str:
         """Generate response from LLM"""
         try:
             if provider == ModelProvider.OPENAI:
                 # return await self._generate_openai_response(messages, model_name)
-                return await self._generate_openai_agent_response(messages, model_name)
+                return await self._generate_openai_agent_response(messages, uploaded_files)
             elif provider == ModelProvider.ANTHROPIC:
                 return await self._generate_anthropic_response(messages, model_name)
             else:
@@ -215,8 +215,9 @@ class LLMService:
             logger.error(f"Error generating response with {provider}/{model_name}: {e}")
             raise
 
-    async def _generate_openai_agent_response(self, messages: List[Dict[str, str]], model_name: str) -> str:
-            logger.debug(f"Agent Input: {messages}")
+    async def _generate_openai_agent_response(self, messages: List[Dict[str, str]], uploaded_files: List[str]) -> str:
+            # Update agent context with user uploaded files
+            self.agent_context.user_uploaded_files = uploaded_files
             result = await Runner.run(starting_agent=self.agent,
                                       input=messages,
                                       context=self.agent_context)
