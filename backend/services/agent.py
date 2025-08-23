@@ -2,40 +2,31 @@ from __future__ import annotations
 from agents import Agent
 
 from models.agent import AgentRunResultContext
-from services.tools import job_search_tool, job_search_with_resume_tool
+from services.tools import job_search_tool
 
 
 job_search_agent = Agent[AgentRunResultContext](
     name="Job Search Agent",
-    handoff_description="Specialist that searches for jobs and return the top matches.",
+    handoff_description="Specialist that searches for jobs and returns the top matches.",
     instructions=(
-        "You help users search job openings based on keywords, titles, or locations provided by the user."
-        "Ask clarifying questions if the query is vague. "
-        "Then present the results as a Markdown-formatted list. "
-        "Each job should be shown as a bullet point in the format: "
-        "* <id> | [<title>](<url>) | <location> | <publish_date>. "
-        "If publish_date is missing, omit it. "
-        "Be factual; if no results, say so and suggest query tweaks."
+        "You help users search job openings.\n\n"
+        "Use the user's written query and, if present, any uploaded file content (resume, skills list, etc.) "
+        "to build a comprehensive search query. "
+        "If no uploaded file exists, use only the user's query.\n\n"
+        "Steps:\n"
+        "1. If the request is vague, ask clarifying questions first.\n"
+        "2. When ready, call `job_search_tool` with a query that combines:\n"
+        "   - The user's explicit request.\n"
+        "   - The uploaded file content, if available.\n"
+        "3. The number of results to be returned, by default is 10, otherwise use the number user requested as k.\n"
+        "4. After calling the tool, append the exact search query you used to `context.search_queries`.\n"
+        "5. Present results as a Markdown-formatted list:\n"
+        "   * <id> | [<title>](<url>) | <location> | <publish_date>\n"
+        "   (omit publish_date if missing).\n\n"
+        "Be factual: if no results, say so and suggest refinements to the query."
     ),
     tools=[job_search_tool],
 )
-
-# job_search_with_resume_agent = Agent[AgentRunResultContext](
-#     name="Resume Job Search Agent",
-#     instructions=(
-#         "You help users search job openings by analyzing the resume the user provided, matching experience/skills to job listings "
-#         "You can access the latest user uploaded file from the last element of AgentRunResultContext.user_uploaded_files."
-#         "For exmample, wapper.context.user_uploaded_files[-1]."
-#         "If user specifically ask for K jobs opening, take k as input of the tool, if not, k=5"
-#         "So, you will call job_search_with_resume_tool like job_search_with_resume_tool(wapper, wapper.context.user_uploaded_files[-1])"
-#         "Present the results as a markdown-formateed list"
-#         "Each job should be shown as a bullet point in the format: "
-#         "* <id> | [<title>](<url>) | <location> | <publish_date>. "
-#         "Be factual; if no resume uploaded, don't call the tool and suggest user to upload their resume"
-#         "If no results, say no and suggest resume editing."
-#     ),
-#     tools=[job_search_with_resume_tool],
-# )
 
 job_followup_agent = Agent[AgentRunResultContext](
     name="Job Follow-up Agent",
@@ -58,9 +49,8 @@ ROUTER_AGENT = Agent[AgentRunResultContext](
     instructions=(
         "# Role\n"
         "You are the first agent in the conversation. Your job is to understand intent and decide:\n"
-        "- If the user is asking about job search with a query(e.g., 'find ML jobs', 'search roles in SF'), HAND OFF to Job Search Agent.\n"
-        "- If the user is asking to tailor/modify a resume for a SPECIFIC job from recent results (e.g., 'modify my resume for JOB#102'), "
-        "HAND OFF to Resume Modifier Agent.\n"
+        "- If the user is asking about job search (e.g., 'find ML jobs', 'search roles in SF'), HAND OFF to Job Search Agent.\n"
+        "- If the user is aksing a follow-up question about one of jobs in search tool result, HAND OFF to Job Follow-up Agent.\n"
         "- Otherwise, answer as a helpful assistant (general chat), without calling tools or handoffs.\n\n"
         "# Important\n"
         "When handing off, provide a concise summary of the user request (context) to help the next agent. "

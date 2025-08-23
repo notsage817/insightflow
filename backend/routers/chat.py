@@ -115,11 +115,17 @@ async def send_message(conversation_id: str, request: ChatRequest):
         # Prepare messages for LLM
         messages = []
         for msg in conversation.messages:
-            messages.append({
-                "role": msg.role.value,
-                "content": msg.content
-            })
-        
+            if msg.file_attachment:
+                messages.append({
+                    "role": msg.role.value,
+                    "content": msg.content + '\n\nUser Uploaded File:\n' + msg.file_attachment
+                })
+            else:
+                messages.append({
+                    "role": msg.role.value,
+                    "content": msg.content
+                })
+
         # Generate AI response
         logger.info(f"Generating response for conversation {conversation_id} with {request.model_provider}/{request.model_name}")
         ai_response = await llm_service.generate_response(

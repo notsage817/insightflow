@@ -7,10 +7,6 @@ import json
 
 from models.agent import AgentRunResultContext
 
-import logging
-
-logger = logging.getLogger(__name__)
-
 
 TRITON_ENDPOINT_ENV = "TRITON_ENDPOINT"
 
@@ -39,61 +35,6 @@ class Searcher:
 # Gloabl instance
 SEARCHER = Searcher(url=os.getenv(TRITON_ENDPOINT_ENV))
 
-@function_tool
-def job_search_with_resume_tool(wrapper:RunContextWrapper[AgentRunResultContext],resume:str,k:int) -> List[Dict[str, Any]]:
-    """
-    Search for job openings related to the latest uploaded resume and store results in shared context.
-
-    This function queries the job search backend to retrieve up to ``k`` 
-    job postings that are most relevant to the latest uploaded resume. 
-
-    In addition to returning results directly, this function also updates
-    the shared run context ``wrapper.context.search_tool_results`` by
-    mapping the last string in context ``context.user_uploaded_files[-1]`` string to the retrieved list of job postings.
-    This allows other agents or tools to reuse the search results later
-    without re-running the query.
-
-    Args:
-        wrapper (RunContextWrapper[AgentRunResultContext]): 
-            Provides access to the shared run context object. The field
-            ``wrapper.context.search_tool_results`` is updated with the results.
-        resume(str):
-            User uploaded resume as a string.
-        k (int): 
-            The maximum number of job results to return.
-
-    Returns:
-        List[Dict[str, Any]]: 
-            A list of job posting results. Each result contains:
-            
-            - **title** (str): Job title.  
-            - **url** (str): Direct URL to the job posting.  
-            - **job** (dict): Detailed job information, which may include:  
-                - **job_id** (str): Unique job identifier.  
-                - **title** (str): Job title (duplicate of top-level title).  
-                - **company** (str): Company name.  
-                - **description** (str): Full job description text.  
-                - **summary** (str): Short job summary.  
-                - **location** (str): Human-readable job location.  
-                - **city**, **state**, **country** (str): Structured location fields.  
-                - **work_arrangement** (str): e.g., "remote", "onsite", "hybrid".  
-                - **publish_date** (str): ISO date string for posting date.  
-                - **job_type** (str): e.g., "full_time", "part_time".  
-                - **experience_level** (str): e.g., "entry_level", "senior_level".  
-                - **salary_min**, **salary_max** (float): Salary range (if available).  
-                - **salary_currency** (str): Currency code (e.g., "USD").  
-                - **required_skills** (List[str]): Essential skills required.  
-                - **preferred_skills** (List[str]): Optional/nice-to-have skills.  
-                - **minimum_qualifications** (List[str]): Required qualifications.  
-                - **preferred_qualifications** (List[str]): Optional qualifications.  
-                - **application_url** (str): URL for applying.  
-                - **source_platform** (str): Source site/platform name.  
-            - **score** (float): Relevance score from the search engine.
-    """
-    file=[resume]
-    results = SEARCHER.search(query=[file], k=k)
-    wrapper.context.search_tool_results[file] = results
-    return results
 
 # OpenAI function tool uses Python doc string to understand how to use the tool:
 # https://openai.github.io/openai-agents-python/tools/#function-tools
@@ -168,11 +109,7 @@ def job_search_tool(wrapper: RunContextWrapper[AgentRunResultContext], query: st
             }
         ]
     """
-    if AgentRunResultContext.user_uploaded_files:
-        input = query+'\n'+AgentRunResultContext.user_uploaded_files[-1]
-        logger.debug("Resume appended to query.")
-    results = SEARCHER.search(query=input, k=k)
-    logger.debug(f"Find query results:{results}")
+    results = SEARCHER.search(query=query, k=k)
     # Add query -> search results to local context for agents:
     # https://openai.github.io/openai-agents-python/context/#local-context
     wrapper.context.search_tool_results[query] = results
