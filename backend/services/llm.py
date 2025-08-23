@@ -217,10 +217,12 @@ class LLMService:
 
     async def _generate_openai_agent_response(self, messages: List[Dict[str, str]], uploaded_files: List[str]) -> str:
             # Update agent context with user uploaded files
-            self.agent_context.user_uploaded_files = uploaded_files
+            self.agent_context.user_uploaded_files.append(uploaded_files)
+            logger.debug(f"Latest uploaded: {self.agent_context.user_uploaded_files[-1]}")
             result = await Runner.run(starting_agent=self.agent,
                                       input=messages,
                                       context=self.agent_context)
+            
             return result.final_output
     
     async def _generate_openai_response(self, messages: List[Dict[str, str]], model_name: str) -> str:

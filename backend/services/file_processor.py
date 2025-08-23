@@ -4,6 +4,8 @@ from typing import Optional
 from fastapi import UploadFile, HTTPException
 import PyPDF2
 from config.settings import get_settings
+import fitz
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -65,15 +67,13 @@ class FileProcessor:
     def _extract_pdf_text(self, pdf_content: bytes) -> str:
         """Extract text from PDF content"""
         try:
-            from io import BytesIO
-            pdf_reader = PyPDF2.PdfReader(BytesIO(pdf_content))
-            
             text_content = ""
-            for page_num, page in enumerate(pdf_reader.pages):
+            pdf_stream = io.BytesIO(pdf_content)
+            doc=fitz.open(stream = pdf_stream, filetype='pdf')
+            
+            for page_num in range(doc.page_count):
                 try:
-                    page_text = page.extract_text()
-                    text_content += page_text + "\n"
-                    logger.debug(f"Extracted text from page {page_num + 1}")
+                    text_content+=doc[page_num].get_text()
                 except Exception as e:
                     logger.warning(f"Error extracting text from page {page_num + 1}: {e}")
                     continue
@@ -81,7 +81,7 @@ class FileProcessor:
             if not text_content.strip():
                 raise ValueError("No text content could be extracted from PDF")
             
-            logger.info(f"Successfully extracted {len(text_content)} characters from PDF")
+            logger.info(f"Successfully extracted {len(doc)} pages from PDF")
             return text_content.strip()
             
         except Exception as e:
